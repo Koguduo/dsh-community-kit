@@ -1,0 +1,12 @@
+# 登录态、浏览器 profile、日志、缓存一律不进仓库
+node_modules/
+modelscope-profile/
+logs/
+*.log
+*.bak-*
+last-dump.*
+error.png
+.env
+.env.*
+*.pem
+*.key
