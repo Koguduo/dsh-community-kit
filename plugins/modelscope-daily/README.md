@@ -1,39 +1,51 @@
-# 榄旀惌(ModelScope) 姣忔棩榄旂矑鑷姩棰嗗彇
+# 魔搭(ModelScope) 每日魔粒自动领取
 
-> 榄旂矑瑙勫垯锛氭瘡澶╃櫥褰曢€?**200**锛岀粦瀹氶樋閲屼簯鍐?**+50**锛屽叡 **250/澶?*锛?*褰撴棩鏈夋晥**銆佷笉鐢ㄦ竻闆躲€?> 鏈柟妗堢敤 Playwright 椹卞姩涓€涓?*涓撶敤** Edge profile锛屾瘡澶╃櫥褰曚竴娆″苟灏濊瘯鐐广€岀鍒?棰嗗彇銆嶏紝
-> 鐢?Windows 浠诲姟璁″垝瀹氭椂鎵ц锛岀櫥褰曟€佸拰鏃ュ織閮界暀鍦ㄦ湰鏈恒€?
-## 涓€娆℃€у噯澶?
+> 魔粒规则：每天登录送 200，绑定阿里云再 +50，共 250/天，当日有效、不用清零。
+> 本方案用 Playwright 驱动一个专用 Edge profile，每天登录一次并尝试点「签到/领取」，
+> 由 Windows 任务计划定时执行，登录态和日志都留在本机（K 盘）。
+
+## 一次性准备
+
 ```powershell
-cd D:\Documents\deepseek-harness\default-workspace
+cd K:\AI\Github.cli\dsh-community-kit
 
-# 1) 鐧诲綍涓€娆★紙浼氬脊鍑烘祻瑙堝櫒绐楀彛锛屾壂鐮?鐭俊鐧诲綍锛屾垚鍔熷悗鑷姩鍏抽棴锛?node modelscope-daily\login.mjs
+# 1) 登录一次（会弹出浏览器窗口，扫码/短信登录，成功后自动关闭）
+node plugins\modelscope-daily\login.mjs
 
-# 2) 鎵嬪姩楠岃瘉涓€杞紙鏈夊ご锛岃兘浜茬溂鐪嬪埌瀹冪偣浜嗕粈涔堬級
-node modelscope-daily\daily.mjs --headed --dump
+# 2) 手动验证一轮（有头，能亲眼看到它点了什么）
+node plugins\modelscope-daily\daily.mjs --headed --dump
 
-# 3) 娉ㄥ唽姣忓ぉ 08:30 鐨勮鍒掍换鍔?powershell -ExecutionPolicy Bypass -File modelscope-daily\install-task.ps1
+# 3) 注册每天 08:30 的计划任务
+powershell -ExecutionPolicy Bypass -File plugins\modelscope-daily\install-task.ps1
 ```
 
-## 鏂囦欢璇存槑
+## 文件说明
 
-| 鏂囦欢 | 浣滅敤 |
+| 文件 | 作用 |
 |---|---|
-| `login.mjs` | 棣栨鐧诲綍锛岀櫥褰曟€佸啓鍏ヤ笓鐢?profile |
-| `daily.mjs` | 姣忔棩鎵ц锛氭墦寮€ `/my/overview` 鈫?璇婚瓟绮掓暟 鈫?鐐圭鍒?棰嗗彇 鈫?澶嶆牳浣欓鍙樺寲 鈫?鍐欐棩蹇?|
-| `install-task.ps1` | 娉ㄥ唽/鏇存柊 Windows 璁″垝浠诲姟锛堟瘡澶?08:30锛岄敊杩囧紑鏈鸿ˉ璺戯級 |
-| `run-daily.cmd` | 澶囩敤鍏ュ彛锛堟墜鍔?璋冭瘯鐢級 |
+| `login.mjs` | 首次登录，登录态写入专用 profile |
+| `daily.mjs` | 每日执行：打开 `/my/overview` → 读魔粒数 → 点签到/领取 → 复核余额变化 → 写日志 |
+| `install-task.ps1` | 注册/更新 Windows 计划任务（每天 08:30，错过开机补跑） |
+| `run-daily.cmd` | 备用入口（手动/调试用） |
 
-## 鏁版嵁浣嶇疆锛堥兘鍦ㄦ湰鏈猴紝涓嶈繘 workspace锛?
+## 数据位置（本机，不进仓库）
+
 ```
 K:\AI\DSH-Automation\
-鈹溾攢 modelscope-profile\     # 涓撶敤娴忚鍣?profile锛堝惈鐧诲綍鎬侊紝鍒嫹璐?涓婁紶锛?鈹斺攢 logs\                   # YYYY-MM-DD.log銆乼ask.log锛涘け璐ユ椂 error.png
+├─ modelscope-profile\     # 专用浏览器 profile（含登录态，别拷贝/上传）
+└─ logs\                   # YYYY-MM-DD.log、task.log；失败时 error.png
 ```
 
-`--dump` 浼氭妸椤甸潰鏂囨湰/HTML/鎴浘鍐欏埌 `K:\AI\DSH-Automation\`锛岀敤浜庢帓鏌ラ€夋嫨鍣ㄣ€?
-## 鏃ュ織鍒よ
+`--dump` 会把页面文本/HTML/截图写到 `K:\AI\DSH-Automation\`，用于排查选择器。
+可用环境变量 `DSH_AUTOMATION_DIR` 改到别处。
 
-- `RESULT: CLAIMED` 鈥?鎵惧埌浜嗗苟鐐逛簡銆岀鍒?棰嗗彇銆?- `RESULT: VISITED_ONLY` 鈥?娌℃壘鍒版寜閽紙寰堝彲鑳界櫥褰曞嵆鑷姩鍙戞斁 200锛屽睘姝ｅ父锛?- `NEED_LOGIN` 鈥?鐧诲綍鎬佸け鏁堬紝閲嶈窇 `login.mjs` 鍗冲彲锛堥€氬父鍑犱釜鏈堜竴娆★級
+## 日志判读
 
-## 娉ㄦ剰
+- `RESULT: CLAIMED` — 找到了并点了「签到/领取」
+- `RESULT: VISITED_ONLY` — 没找到按钮（很可能登录即自动发放 200，属正常）
+- `NEED_LOGIN` — 登录态失效，重跑 `login.mjs` 即可（通常几个月一次）
 
-- 杩欐槸**缃戦〉鑷姩鍖?*锛堢瓑浠蜂簬浣犳墜鍔ㄥ紑娴忚鍣ㄧ櫥褰曪級锛屼笉鏄皟 API锛涙敼鐗堝彲鑳借閫夋嫨鍣ㄥけ鏁堬紝灞婃椂鐢?`--dump` 閲嶆柊瀵逛竴涓嬫寜閽枃妗堬紙鑴氭湰宸叉敮鎸併€岀鍒?棰嗗彇銆嶅鏂囨鍏滃簳锛夈€?- 涓嶈鎶婅繖涓洰褰曟彁浜ゅ埌浠讳綍浠撳簱锛沗modelscope-profile` 閲屾湁浣犵殑鐧诲綍鎬併€?- 鑻ュ叕鍙?瀛︽牎缃戠粶鎴栦唬鐞嗗奖鍝嶈闂紝鑴氭湰璧扮郴缁熼粯璁ょ綉缁滐紙涓嶅己鍒朵唬鐞嗭級銆
+## 注意
+
+- 这是网页自动化（等价于手动开浏览器登录），不是调 API；改版可能让选择器失效，届时用 `--dump` 重新对按钮文案（脚本已支持「签到/领取」多文案兜底）。
+- 不要把这个目录提交到任何仓库；`modelscope-profile` 里有你的登录态。

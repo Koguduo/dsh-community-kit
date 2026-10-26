@@ -1,8 +1,8 @@
-# 娉ㄥ唽/鏇存柊 Windows 浠诲姟璁″垝锛氭瘡澶?08:30 鑷姩棰嗛瓟绮?# 鐢ㄦ硶锛堝湪 workspace 鏍圭洰褰曪級锛?powershell -ExecutionPolicy Bypass -File modelscope-daily\install-task.ps1
+# 注册/更新 Windows 任务计划：每天 08:30 自动领魔粒
+# 用法（在仓库根目录）： powershell -ExecutionPolicy Bypass -File plugins\modelscope-daily\install-task.ps1
 
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
-$ws = Split-Path $here -Parent
 $taskName = 'DSH-ModelScope-Daily'
 
 $node = Join-Path $env:DSH_HOME 'dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe'
@@ -11,25 +11,24 @@ if (-not (Test-Path -LiteralPath $node)) {
 }
 if (-not (Test-Path -LiteralPath $node)) {
   $c = Get-Command node -ErrorAction SilentlyContinue
-  if (-not $c) { throw '鎵句笉鍒?node.exe锛岃鍏堢‘璁?Node 鍙敤' }
+  if (-not $c) { throw '找不到 node.exe，请先确认 Node 可用' }
   $node = $c.Source
 }
 
 $script = Join-Path $here 'daily.mjs'
-if (-not (Test-Path -LiteralPath $script)) { throw "鎵句笉鍒?$script" }
+if (-not (Test-Path -LiteralPath $script)) { throw "找不到 $script" }
 
-$action = New-ScheduledTaskAction -Execute $node -Argument ('"' + $script + '"') -WorkingDirectory $ws
+$action = New-ScheduledTaskAction -Execute $node -Argument ('"' + $script + '"') -WorkingDirectory (Split-Path $here -Parent)
 $trigger = New-ScheduledTaskTrigger -Daily -At '08:30'
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
-$desc = '榄旀惌(ModelScope)姣忔棩鐧诲綍棰嗗彇榄旂矑锛涘け璐ユ棩蹇楄 K:\AI\DSH-Automation\logs'
+$desc = '魔搭(ModelScope)每日登录领取魔粒；日志见 K:\AI\DSH-Automation\logs'
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description $desc -Force | Out-Null
-Write-Output "宸叉敞鍐屼换鍔? $taskName"
-Write-Output "  瑙﹀彂: 姣忓ぉ 08:30锛堥敊杩囧悗寮€鏈鸿ˉ璺戯級"
-Write-Output "  鍛戒护: `"$node`" `"$script`""
-Write-Output "  宸ヤ綔鐩綍: $ws"
-Write-Output "  鏃ュ織: $env:LOCALAPPDATA\dsh-automation\logs"
+Write-Output "已注册任务: $taskName"
+Write-Output '  触发: 每天 08:30（错过后开机补跑）'
+Write-Output "  命令: `"$node`" `"$script`""
+Write-Output '  日志: K:\AI\DSH-Automation\logs'
 Write-Output ''
-Write-Output '鎵嬪姩璇曡窇:  Start-ScheduledTask -TaskName DSH-ModelScope-Daily'
-Write-Output '鏌ョ湅鐘舵€?  Get-ScheduledTask -TaskName DSH-ModelScope-Daily | Get-ScheduledTaskInfo'
-Write-Output '鍒犻櫎浠诲姟:  Unregister-ScheduledTask -TaskName DSH-ModelScope-Daily -Confirm:$false'
+Write-Output '手动试跑:  Start-ScheduledTask -TaskName DSH-ModelScope-Daily'
+Write-Output '查看状态:  Get-ScheduledTask -TaskName DSH-ModelScope-Daily | Get-ScheduledTaskInfo'
+Write-Output '删除任务:  Unregister-ScheduledTask -TaskName DSH-ModelScope-Daily -Confirm:$false'
