@@ -1,5 +1,6 @@
-# 注册/更新 Windows 任务计划：每天 08:30 自动领魔粒
-# 用法（在仓库根目录）： powershell -ExecutionPolicy Bypass -File plugins\modelscope-daily\install-task.ps1
+# Register a daily Windows scheduled task: ModelScope daily credits
+# Usage (repo root): powershell -ExecutionPolicy Bypass -File plugins\modelscope-daily\install-task.ps1
+# ASCII-only on purpose: Windows PowerShell 5.1 reads BOM-less .ps1 as ANSI.
 
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
@@ -10,25 +11,27 @@ if (-not (Test-Path -LiteralPath $node)) {
   $node = 'C:\Users\Kogud\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe'
 }
 if (-not (Test-Path -LiteralPath $node)) {
-  $c = Get-Command node -ErrorAction SilentlyContinue
-  if (-not $c) { throw '找不到 node.exe，请先确认 Node 可用' }
-  $node = $c.Source
+  $cmd = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $cmd) { throw 'node.exe not found. Install Node.js or run from DSH runtime.' }
+  $node = $cmd.Source
 }
 
-$script = Join-Path $here 'daily.mjs'
-if (-not (Test-Path -LiteralPath $script)) { throw "找不到 $script" }
+$scriptPath = Join-Path $here 'daily.mjs'
+if (-not (Test-Path -LiteralPath $scriptPath)) { throw "missing $scriptPath" }
 
-$action = New-ScheduledTaskAction -Execute $node -Argument ('"' + $script + '"') -WorkingDirectory (Split-Path $here -Parent)
+$action = New-ScheduledTaskAction -Execute $node -Argument ('"' + $scriptPath + '"') -WorkingDirectory (Split-Path $here -Parent)
 $trigger = New-ScheduledTaskTrigger -Daily -At '08:30'
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
-$desc = '魔搭(ModelScope)每日登录领取魔粒；日志见 K:\AI\DSH-Automation\logs'
+$desc = 'ModelScope daily credits (login + claim)'
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description $desc -Force | Out-Null
-Write-Output "已注册任务: $taskName"
-Write-Output '  触发: 每天 08:30（错过后开机补跑）'
-Write-Output "  命令: `"$node`" `"$script`""
-Write-Output '  日志: K:\AI\DSH-Automation\logs'
+
+Write-Output "registered task: $taskName"
+Write-Output '  trigger: daily 08:30 (runs on missed start when available)'
+Write-Output "  node:   $node"
+Write-Output "  script: $scriptPath"
+Write-Output '  logs:   K:\AI\DSH-Automation\logs'
 Write-Output ''
-Write-Output '手动试跑:  Start-ScheduledTask -TaskName DSH-ModelScope-Daily'
-Write-Output '查看状态:  Get-ScheduledTask -TaskName DSH-ModelScope-Daily | Get-ScheduledTaskInfo'
-Write-Output '删除任务:  Unregister-ScheduledTask -TaskName DSH-ModelScope-Daily -Confirm:$false'
+Write-Output 'Run now:   Start-ScheduledTask -TaskName DSH-ModelScope-Daily'
+Write-Output 'Info:      Get-ScheduledTask -TaskName DSH-ModelScope-Daily | Get-ScheduledTaskInfo'
+Write-Output 'Remove:    Unregister-ScheduledTask -TaskName DSH-ModelScope-Daily -Confirm:$false'
