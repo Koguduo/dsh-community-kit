@@ -42,6 +42,8 @@ powershell -ExecutionPolicy Bypass -File plugins\modelscope-daily\install-task.p
 
 > 实测：页面上并没有「签到/领取」按钮，**登录即自动发放**；日志里出现 `RESULT: VISITED_ONLY`（余额不变）是正常结果。
 >
+> 每日互动：脚本默认在模型页执行「**点赞 → 等 2 秒 → 取消点赞**」，每天最多 10 次（+2 魔粒/次）。用完即取消，不留喜欢记录，降低风控风险；`--no-likes` 可关闭，`--likes-max N` 可限制本次数量。
+>
 > 注意：专用 profile 等同于在你的账号上增加一个登录会话。若平台存在单会话互踢，日常浏览器可能掉线；此时改用"复用真实 Edge profile（Edge 未运行时执行）"的方式。
 
 ### 3. 插件安装前备份配置

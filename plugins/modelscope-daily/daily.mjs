@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 /**
- * 魔搭(ModelScope) 每日魔粒自动领取
+ * 魔搭(ModelScope) 每日魔粒自动领取 + 每日互动(点赞后立即取消)
  *
- * 逻辑：
- *   1. 用专用 profile 打开 /my/overview（登录态复用 login.mjs 保存的）
- *   2. 读「Magic Cube」按钮上的魔粒数
- *   3. 先扫描页面上「签到/领取」类按钮，找不到就点开 Magic Cube 再扫描
- *   4. 点击后复核魔粒数变化，写日志
+ * 流程：
+ *   1. 专用 profile 打开 /my/overview，确认登录态，读魔粒余额
+ *   2. 尝试页面上的「签到/领取」按钮（实测没有，登录即自动发放）
+ *   3. 每日互动：在模型页点赞 → 等 2 秒 → 取消点赞（不留痕迹，降低风控风险）
+ *      每日上限 10 次（+2 魔粒/次）
+ *   4. 复核额度计数与余额，写日志
  *
  * 用法：
- *   node plugins/modelscope-daily/daily.mjs                 # 无头（计划任务用）
- *   node plugins/modelscope-daily/daily.mjs --headed        # 有头，肉眼观察
- *   node plugins/modelscope-daily/daily.mjs --headed --dump # 额外保存页面文本/截图
- *
- * 魔粒规则：每天登录送 200 + 绑阿里云 50，当日有效，不用就清零。
+ *   node plugins/modelscope-daily/daily.mjs                    # 无头 + 互动
+ *   node plugins/modelscope-daily/daily.mjs --headed --dump    # 有头 + 存页面快照
+ *   node plugins/modelscope-daily/daily.mjs --no-likes         # 只登录，不互动
+ *   node plugins/modelscope-daily/daily.mjs --likes-max 3      # 本次最多做 3 个
  */
 import { chromium } from 'playwright';
 import path from 'node:path';
@@ -27,6 +27,10 @@ fs.mkdirSync(logDir, { recursive: true });
 const argv = process.argv.slice(2);
 const headed = argv.includes('--headed');
 const dump = argv.includes('--dump');
+const noLikes = argv.includes('--no-likes');
+const likesMaxArg = argv.indexOf('--likes-max');
+const likesMax = likesMaxArg >= 0 ? Math.max(0, Number(argv[likesMaxArg + 1]) || 0) : 10;
+
 const url = process.env.MODELSCOPE_URL || 'https://modelscope.cn/my/overview';
 const stamp = () => new Date().toISOString();
 const today = () => stamp().slice(0, 10);
@@ -39,11 +43,16 @@ const log = (...a) => {
 const ctx = await chromium.launchPersistentContext(profileDir, {
   channel: 'msedge',
   headless: !headed,
-  viewport: { width: 1280, height: 860 },
+  viewport: { width: 1440, height: 1000 },
   locale: 'zh-CN',
   args: ['--disable-blink-features=AutomationControlled'],
 });
 const page = ctx.pages()[0] || (await ctx.newPage());
+
+const ICON = {
+  outline: (h) => h.includes('shoucangzhuangtai216x16'),
+  fill: (h) => /zhuangtai3-fill20x20/i.test(h),
+};
 
 async function readBalance() {
   return page.evaluate(() => {
@@ -73,6 +82,41 @@ async function clickClaimLike(label) {
   return false;
 }
 
+async function likeState() {
+  return page.evaluate((icons) => {
+    const href = (x) => x.getAttribute('href') || x.getAttribute('xlink:href') || '';
+    const uses = Array.from(document.querySelectorAll('use'));
+    const counts = (re) => uses.filter((x) => (typeof re === 'string' ? href(x).includes(re) : re.test(href(x)))).length;
+    return { outline: counts('shoucangzhuangtai216x16'), fill: counts(/zhuangtai3-fill20x20/i) };
+  }, null).catch(() => ({ outline: 0, fill: 0 }));
+}
+
+async function clickIcon(mode) {
+  const h = await page.evaluateHandle((mode) => {
+    const href = (x) => x.getAttribute('href') || x.getAttribute('xlink:href') || '';
+    const match = (h) => (mode === 'outline' ? h.includes('shoucangzhuangtai216x16') : /zhuangtai3-fill20x20/i.test(h));
+    const uses = Array.from(document.querySelectorAll('use')).filter((x) => match(href(x)));
+    if (!uses.length) return null;
+    const top = uses
+      .map((x) => ({ x, y: (x.getBoundingClientRect && x.getBoundingClientRect().y) || 0 }))
+      .sort((a, b) => a.y - b.y)[0].x;
+    return top.closest('button, [role="button"], [data-autolog]') || top.closest('svg')?.parentElement || top;
+  }, mode);
+  const el = h.asElement();
+  if (!el) return false;
+  await el.click({ timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(2200);
+  return true;
+}
+
+async function likesRemaining() {
+  await page.goto('https://modelscope.cn/magicube/usage?tab=earn', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForTimeout(3500);
+  const text = await page.evaluate(() => document.body.innerText).catch(() => '');
+  const m = text.match(/收藏\/喜欢[\s\S]{0,80}?今日剩余\s*(\d+)\s*次/);
+  return m ? Number(m[1]) : null;
+}
+
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(4000);
@@ -81,35 +125,81 @@ try {
   const loggedIn = /个人主页|我的Notebook|账号设置/.test(bodyText) && !/请登录|扫码登录|手机号登录/.test(bodyText);
   log('loggedIn =', loggedIn, '| url =', page.url());
   if (!loggedIn) {
-    log('NEED_LOGIN: 登录态失效，请运行 node plugins/modelscope-daily/login.mjs');
+    log('NEED_LOGIN: 登录态失效，请运行 login.mjs');
     process.exitCode = 2;
     await ctx.close();
     process.exit();
   }
 
   const before = await readBalance();
-  log('魔粒余额（点击前）=', before);
+  log('魔粒余额（开始前）=', before);
 
-  let claimed = false;
-  claimed = await clickClaimLike('page');
+  let claimed = await clickClaimLike('page');
   if (!claimed) {
     const cube = page.locator('button[aria-label="Magic Cube"]').first();
     if (await cube.count().catch(() => 0)) {
       await cube.click({ timeout: 4000 }).catch(() => {});
       await page.waitForTimeout(1500);
       claimed = await clickClaimLike('magic-cube');
-      if (!claimed) log('页面/Magic Cube 内未找到「签到/领取」按钮（可能登录即自动发放）');
       await page.keyboard.press('Escape').catch(() => {});
-    } else {
-      log('未找到 Magic Cube 按钮');
     }
   }
+  log(claimed ? 'CLAIM: clicked' : 'CLAIM: 无按钮（登录即发放）');
 
-  await page.waitForTimeout(2000);
+  let done = 0;
+  let tried = 0;
+  let remaining = null;
+  if (!noLikes && likesMax > 0) {
+    remaining = await likesRemaining();
+    log('互动额度 今日剩余 =', remaining);
+    const target = Math.min(likesMax, remaining == null ? likesMax : remaining);
+
+    if (target > 0) {
+      await page.goto('https://modelscope.cn/models?page=1', { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.waitForTimeout(4000);
+      const links = await page.$$eval('a[href*="/models/"]', (as) =>
+        [...new Set(as.map((a) => a.href.split('?')[0]).filter((u) => /\/models\/[^/]+\/[^/]+$/.test(u)))],
+      ).catch(() => []);
+
+      for (const link of links) {
+        if (done >= target) break;
+        if (tried >= target + 12) break;
+        tried++;
+        try {
+          await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 45000 });
+          await page.waitForTimeout(3500);
+          const st0 = await likeState();
+          if (st0.fill > 0) {
+            log('skip (already liked):', link);
+            continue;
+          }
+          const okLike = await clickIcon('outline');
+          const st1 = await likeState();
+          if (!okLike || st1.fill === 0) {
+            log('like failed:', link, JSON.stringify(st0), '->', JSON.stringify(st1));
+            continue;
+          }
+          await page.waitForTimeout(800);
+          const okUnlike = await clickIcon('fill');
+          const st2 = await likeState();
+          if (!okUnlike || st2.fill > 0) {
+            log('UNLIKE FAILED, 请手动取消:', link, JSON.stringify(st2));
+            continue;
+          }
+          done++;
+          log(`like+unlike ok (${done}/${target}):`, link);
+        } catch (e) {
+          log('like phase error:', link, e.message);
+        }
+      }
+    }
+  } else if (noLikes) {
+    log('互动已跳过 (--no-likes)');
+  }
+
   const after = await readBalance();
-  const delta = before != null && after != null ? after - before : null;
-  log('魔粒余额（点击后）=', after, '| 变化 =', delta);
-  log(claimed ? 'RESULT: CLAIMED' : 'RESULT: VISITED_ONLY');
+  log('魔粒余额（结束后）=', after, '| 变化 =', before != null && after != null ? after - before : null);
+  log('互动完成数 =', done, '| 尝试页面数 =', tried, '| 剩余额度(开始前) =', remaining);
 
   if (dump) {
     fs.writeFileSync(path.join(root, 'last-dump.txt'), await page.evaluate(() => document.body.innerText));
