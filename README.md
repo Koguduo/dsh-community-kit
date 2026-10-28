@@ -24,6 +24,10 @@
 ### 2. 魔搭每日魔粒自动领取
 
 ```powershell
+# 安装依赖（脚本使用系统 Edge，不需要下载 Playwright 自带浏览器）
+$env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+npm install
+
 # 登录一次（会弹出专用浏览器窗口，扫码/短信登录后自动关闭）
 node plugins\modelscope-daily\login.mjs
 
@@ -35,6 +39,10 @@ powershell -ExecutionPolicy Bypass -File plugins\modelscope-daily\install-task.p
 ```
 
 魔粒规则：每天登录送 200，绑定阿里云 +50，共 250/天，**当日有效**。
+
+> 实测：页面上并没有「签到/领取」按钮，**登录即自动发放**；日志里出现 `RESULT: VISITED_ONLY`（余额不变）是正常结果。
+>
+> 注意：专用 profile 等同于在你的账号上增加一个登录会话。若平台存在单会话互踢，日常浏览器可能掉线；此时改用"复用真实 Edge profile（Edge 未运行时执行）"的方式。
 
 ### 3. 插件安装前备份配置
 

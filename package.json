@@ -1,0 +1,19 @@
+{
+  "name": "dsh-community-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Community toolkit & plugins for DeepSeek Harness (unofficial)",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "modelscope:login": "node plugins/modelscope-daily/login.mjs",
+    "modelscope:daily": "node plugins/modelscope-daily/daily.mjs",
+    "modelscope:daily:headed": "node plugins/modelscope-daily/daily.mjs --headed --dump",
+    "backup:profile": "powershell -ExecutionPolicy Bypass -File plugins/profile-backup/backup-profile.ps1"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1"
+  }
+}
